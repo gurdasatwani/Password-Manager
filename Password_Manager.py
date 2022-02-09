@@ -1,512 +1,752 @@
-import os, sqlite3, hashlib, uuid
-from cryptography.fernet import Fernet
-# os for clearing python screen
-# sqlite3 for database
-# Fernet & hashlib for hashing password
-# uuid for hashing id
+import os, sqlite3, json, random
+from datetime import date, datetime
 
-# all the titles we needed
-lst = ["LOGIN", "SIGN UP", "EXIT","ONE", "MANY", "BACK","SHOW", "ADD", "UPDATE", "DELETE","ALL", "ACCOUNT",
-"WEBSITE", "USERNAME", "PASSWORD"]
+
+lst = [
+    "LOGIN",
+    "SIGN UP",
+    "EXIT",
+    "ONE",
+    "MANY",
+    "BACK",
+    "SHOW",
+    "ADD",
+    "UPDATE",
+    "DELETE",
+    "ALL",
+    "ACCOUNT",
+    "WEBSITE",
+    "USERNAME",
+    "PASSWORD",
+    "ACTIVITY",
+    "BACKUP CODES",
+    "FORGET PASSWORD",
+]
+
 
 class App:
-   def __init__(self):
-      # this constructor will make connection to the database
-      self.conn = sqlite3.connect("database.db") #database name
-      self.cur = self.conn.cursor() #cursor to execute commands
-      # creating a database if not exist as maindata & their values
-      self.cur.execute("CREATE TABLE IF NOT EXISTS maindata (first_name text,last_name text,username text,password text)")
-      # this will commit to the database
-      self.conn.commit()
-      self.input = lambda: input("\nEnter Number : ")
-      self.fnam = None
-      self.usn = None
-      self.psw = None
+    def __init__(self):
+        self.conn = sqlite3.connect("database.db")
+        self.cur = self.conn.cursor()
+        self.cur.execute(
+            "CREATE TABLE IF NOT EXISTS maindata (first_name TEXT,last_name TEXT,username TEXT,password TEXT,activity TEXT,backup_codes TEXT)"
+        )
+        self.conn.commit()
+        self.first_name = None
+        self.last_name = None
+        self.main_username = None
+        self.main_password = None
+        self.main_activity = []
+        self.backup_codes = []
+        self.main_title = "PASSWORD MANAGER"
+        self.choice = None
+        self.date = date.today().strftime("%b-%d-%Y")
+        self.input = lambda: input("\nEnter Number : ")
 
-   def pmenu(self,lst):
-      # this method is for printing menu
-      c=0
-      for i in lst:
-         c+=1
-         print(f"\t\t\t  {'-'*16}")
-         print("\t", end=f"\t\t  {c} ")
-         print(f"| {i}")
+    def check_usernames(self):
+        get_usernames = self.cur.execute(f"SELECT username FROM maindata")
+        all_usernames = []
+        for username in get_usernames:
+            all_usernames.append(username[0])
+        return all_usernames
 
-   def pt(self, name):
-      # this method is for printing title
-      print(f"\t\t{'* '*5}PASSWORD MANAGER{' *'*5}\n")
-      print(f"\t\t     {'* '*5}{name}{' *'*5}")
-   
-   def clear(self):
-      # this method for clearing screen
-      os.system('cls')
-   
-   def login(self):
-      self.clear()
-      self.pt(lst[0])
-      # taking the username & password of existing user
-      print("\n\t\t\t     USERNAME:\n")
-      self.usn = input("\t\t\t ● ")
-      print("\n\t\t\t     PASSWORD:\n")
-      self.psw = input("\t\t\t ● ")
-      # try & except for handling indexerror
-      try:
-         # the below command will check if username exist in maindata or not
-         self.cur.execute(f"SELECT * FROM maindata WHERE username = '{self.usn}'")
-         data = self.cur.fetchall()[0] #store all the info of the user in the tuple
-         if self.MHT(data[3], self.psw):
-            self.fnam = data[0]
-            Account(data[0], self.usn)
-         else:
-            print("\n\t\t\t  Wrong password")
-      except IndexError:
-         print("\n\t\t\t     No Member.")
+    def adapt_list_to_JSON(self, lst):
+        return json.dumps(lst)
 
-   def sign_up(self):
-      self.clear()
-      self.pt(lst[1])
-      # taking the first & last name, username, password for the new user
-      print("\n\t\t\t     FIRST NAME:\n")
-      self.fnam = input("\t\t\t ● ").title()
-      print("\n\t\t\t     LAST NAME:\n")
-      last_name = input("\t\t\t ● ").title()
-      data = self.cur.execute(f"SELECT username FROM maindata")# this command will fetchall the username from maindata
-      data2 = []# empty list for adding all usernames in the list
-      for i in data:
-         data2.append(i[0])# for removing brackets from each username & appending intp data2 list
-      while True:# this loop will keep going until there is no same username in the list
-         print("\n\t\t\t     USERNAME:\n")
-         username = input("\t\t\t ● ")
-         if username not in data2 and not username.isdigit():
-            self.usn = username
-            while True:# this loop will keep going until pw==c_pw
-               print("\n\t\t\t     PASSWORD:\n")
-               password = input("\t\t\t ● ")
-               print("\n\t\t\t     CONFIRM PW:\n")
-               confirm_pw = input("\t\t\t ● ")
-               if password == confirm_pw:#the below command will add the user into maindata
-                  self.psw = password
-                  self.cur.execute("INSERT INTO maindata VALUES ((?),(?),(?),(?))",(self.fnam, last_name, self.usn, self.HS(self.psw)))
-                  self.conn.commit()#the below command will create a table for the user as their username & their values
-                  self.cur.execute(f"CREATE TABLE IF NOT EXISTS {self.usn} (website TEXT,username TEXT,password BLOB,key TEXT)")
-                  self.conn.commit()
-                  Account(self.fnam, self.usn)
-                  break
-               print("\n\t\t\tPassword Not Match\n\t\t\tEnter Again..")
-         else:
-            print('\n\t\t\tUsername Not Available or Cannot A Digit..')
-   
-   def HS(self, P):
-      # this method will hash the password with salt & uuid
-      salt = uuid.uuid4().hex
-      return hashlib.sha256(salt.encode() + P.encode()).hexdigest() + ":" + salt
+    def convert_JSON_to_list(self, data):
+        return json.loads(data)
 
-   def MHT(self, HP, PP):
-      # this method will try to match the given password with database hashed password
-      HP, salt = HP.split(":")
-      return HP == hashlib.sha256(salt.encode() + PP.encode()).hexdigest()
-   
-   def main(self):
-      # the main on which the choices are made
-      self.clear()
-      print(f"\t\t{'* '*5}PASSWORD MANAGER{' *'*5}")
-      self.pmenu(lst[0:3])
-      while True:
-         choice = self.input()
-         if choice in ['1','2','3']:
-            if choice == "1":
-               self.login()
-            elif choice == "2":
-               self.sign_up()
-            elif choice == "3":
-               self.exit()
-            break
-         else:
-            print("\n1 TO 3 ONLY..")
+    def get_time(self):
+        time = datetime.now().strftime("%H:%M:%S")
+        return time
 
-   def exit(self):
-      self.clear()
-      self.conn.close()
-      print("GoodBye...")
-      exit()
+    def get_user_info(self):
+        self.cur.execute(
+            f"SELECT * FROM maindata WHERE username = '{self.main_username}'"
+        )
+        return self.cur.fetchall()[0]
+
+    def add_to_activity(self, text):
+        if len(self.main_activity) > 15:
+            del self.main_activity[14:]
+
+        self.main_activity.insert(0, (self.date, text, self.get_time()))
+        self.cur.execute(
+            f"UPDATE maindata SET activity = '{self.adapt_list_to_JSON(self.main_activity)}' WHERE username = '{self.main_username}'"
+        )
+        self.conn.commit()
+
+    def print_title(self, main_title, title):
+        print(f"\t\t{'* '*5}{main_title}{' *'*5}\n")
+        print(f"\t\t     {'* '*5}{title}{' *'*5}")
+
+    def print_menu(self, lst):
+        for n, i in enumerate(lst):
+            print(f"\t\t\t  {'-'*16}")
+            print("\t", end=f"\t\t  {n+1} ")
+            print(f"| {i}")
+
+    def clear(self):
+        os.system("cls")
+
+    def generate_backup_codes(self):
+        for i in range(5):
+            self.backup_codes.append(random.randint(10000, 99999))
+        self.cur.execute(
+            f"UPDATE maindata SET backup_codes = '{self.adapt_list_to_JSON(self.backup_codes)}' WHERE username = '{self.main_username}'"
+        )
+        self.conn.commit()
+
+    def msg(self):
+        for i in self.backup_codes:
+            print(f"\t\t     {i}")
+        print(
+            "THE ABOVE ARE THE BACKUP CODES IF YOU EVER FORGOT YOUR PASSWORD\nUSE THEM TO RESTORE YOUR ACCOUNT.\nAND REMEMBER EACH CODE CAN ONLY BE USED ONCE.\nSO PLEASE TAKE A SCREENSHOT OR WRITE IT DOWN SOMEWHERE SAFE."
+        )
+
+    def login(self):
+        self.clear()
+        self.print_title(self.main_title, lst[0])
+        print("\n\t\t\t     USERNAME:\n")
+        self.main_username = input("\t\t\t ● ")
+        print("\n\t\t\t     PASSWORD:\n")
+        self.main_password = input("\t\t\t ● ")
+        try:
+            user_info = self.get_user_info()
+            if self.main_password == user_info[3]:
+                (
+                    self.first_name,
+                    self.last_name,
+                    self.main_activity,
+                    self.backup_codes,
+                ) = (
+                    user_info[:2] + user_info[4:]
+                )
+                self.main_activity = self.convert_JSON_to_list(self.main_activity)
+                self.backup_codes = self.convert_JSON_to_list(self.backup_codes)
+                if len(self.backup_codes) == 0:
+                    self.clear()
+                    self.generate_backup_codes()
+                    self.msg()
+                    input("\nPRESS ENTER TO CONTINUE")
+                Account(
+                    self.first_name,
+                    self.last_name,
+                    self.main_username,
+                    self.main_password,
+                    self.main_activity,
+                    self.backup_codes,
+                )
+            else:
+                print("\n\t\t\t  Wrong password")
+        except IndexError:
+            print("\n\t\t\t     No Member.")
+
+    def forget_password(self):
+        self.clear()
+        self.print_title(self.main_title, lst[17])
+        print("\n\t\t\t     USERNAME:\n")
+        self.main_username = input("\t\t\t ● ")
+        print("\n\t\t\t     BACKUP CODE:\n")
+        try:
+            backup_code = int(input("\t\t\t ● "))
+            try:
+                user_info = self.get_user_info()
+                self.backup_codes = user_info[5]
+                self.backup_codes = self.convert_JSON_to_list(self.backup_codes)
+                if backup_code in self.backup_codes:
+                    (
+                        self.first_name,
+                        self.last_name,
+                        self.main_password,
+                        self.main_activity,
+                    ) = (
+                        user_info[:2] + user_info[3:4] + user_info[4:5]
+                    )
+                    self.main_activity = self.convert_JSON_to_list(self.main_activity)
+                    self.backup_codes.remove(backup_code)
+                    if len(self.backup_codes) == 0:
+                        self.clear()
+                        self.generate_backup_codes()
+                        self.msg()
+                        input("\nPRESS ENTER TO CONTINUE")
+                    Account(
+                        self.first_name,
+                        self.last_name,
+                        self.main_username,
+                        self.main_password,
+                        self.main_activity,
+                        self.backup_codes,
+                    )
+                else:
+                    print("\n\t\t\t  Wrong Backup Code")
+            except IndexError:
+                print("\n\t\t\t     No Member.")
+        except ValueError:
+            print("\n\t\t\t     Only Numbers.")
+
+    def sign_up(self):
+        self.clear()
+        self.print_title(self.main_title, lst[1])
+        print("\n\t\t\t     FIRST NAME:\n")
+        self.first_name = input("\t\t\t ● ").title()
+        print("\n\t\t\t     LAST NAME:\n")
+        self.last_name = input("\t\t\t ● ").title()
+        while True:
+            print("\n\t\t\t     USERNAME:\n")
+            self.main_username = input("\t\t\t ● ")
+            if (
+                self.main_username not in self.check_usernames()
+                and not self.main_username.isdigit()
+            ):
+                while True:
+                    print("\n\t\t\t     PASSWORD:\n")
+                    self.main_password = input("\t\t\t ● ")
+                    print("\n\t\t\t     CONFIRM PW:\n")
+                    confirm_pw = input("\t\t\t ● ")
+                    if self.main_password == confirm_pw:
+                        self.cur.execute(
+                            "INSERT INTO maindata VALUES ((?),(?),(?),(?),(?),(?))",
+                            (
+                                self.first_name,
+                                self.last_name,
+                                self.main_username,
+                                self.main_password,
+                                self.adapt_list_to_JSON(self.main_activity),
+                                self.adapt_list_to_JSON(self.backup_codes),
+                            ),
+                        )
+                        self.conn.commit()
+                        self.cur.execute(
+                            f"CREATE TABLE IF NOT EXISTS {self.main_username} (website TEXT,username TEXT,password TEXT)"
+                        )
+                        self.conn.commit()
+                        if len(self.backup_codes) == 0:
+                            self.clear()
+                            self.generate_backup_codes()
+                            self.msg()
+                            input("\nPRESS ENTER TO CONTINUE")
+                        Account(
+                            self.first_name,
+                            self.last_name,
+                            self.main_username,
+                            self.main_password,
+                            self.main_activity,
+                            self.backup_codes,
+                        )
+                        break
+                    print("\n\t\t\tPassword Not Match\n\t\t\tEnter Again..")
+                break
+            else:
+                print("\n\t\t\tUsername Not Available or Cannot A Digit..")
+
+    def exit(self):
+        self.clear()
+        self.conn.close()
+        print("GoodBye...")
+        exit()
+
+    def main(self):
+        self.clear()
+        print(f"\t\t{'* '*5}PASSWORD MANAGER{' *'*5}")
+        self.print_menu(lst[:2] + lst[17:] + lst[2:3])
+        while True:
+            self.choice = self.input()
+            if self.choice in ["1", "2", "3", "4"]:
+                if self.choice == "1":
+                    self.login()
+                elif self.choice == "2":
+                    self.sign_up()
+                elif self.choice == "3":
+                    self.forget_password()
+                elif self.choice == "4":
+                    self.exit()
+                break
+            else:
+                print("\n1 TO 3 ONLY..")
+
 
 class Account(App):
-   # this class is inherited from the app class
-   def __init__(self, name, table):
-      super().__init__() #by this we can easily use app class attributes
-      self.name = name.upper() #user first name
-      self.table = table #username table from maindata
-      self.web = lambda: input("\nEnter Website Name : ").title()
-      self.user = lambda: input("Enter Username : ")
-      self.psw2 = lambda: input("Enter PassWord : ")
-      self.main() # calling the main method from app class
-   
-   def pt(self, name):
-      # this method is for printing user's name & title
-      print(f"\t\t{'* '*5}{self.name}'s ACCOUNT{' *'*5}\n")
-      print(f"\t\t      {'* '*5}{name}{' *'*5}\n")
-   
-   def encrypt(self,key,text):
-      # this method is for encrypting the password with an indivisual key
-      fernet = Fernet(key)
-      enctext = fernet.encrypt(text.encode())
-      return enctext
-   
-   def decrypt(self,key,Htext):
-       # this method is for decrypting the password with an indivisual key
-      fernet = Fernet(key)
-      dectext = fernet.decrypt(Htext).decode()
-      return dectext
-   
-   def show(self):
-      # this method will show all data from username table
-      self.clear()
-      self.pt(lst[6])#the below command will get all the data of the user
-      self.cur.execute(f"SELECT * FROM {self.table}")
-      pdata = self.cur.fetchall()
-      for i in pdata:# this loop will decrypt all the password from the database
-         print(f"\t\t     {i[0]} : {i[1]} {self.decrypt(i[3],i[2])}")
+    def __init__(
+        self,
+        first_name,
+        last_name,
+        main_username,
+        main_password,
+        main_activity,
+        backup_codes,
+    ):
+        super().__init__()
+        self.user_data = None
+        self.first_name = first_name
+        self.last_name = last_name
+        self.main_username = main_username
+        self.main_password = main_password
+        self.main_activity = main_activity
+        self.backup_codes = backup_codes
+        self.main_title = f"{self.first_name.upper()}'s ACCOUNT"
+        self.website = None
+        self.username = None
+        self.password = None
+        self.List = []
+        self.web = lambda: input("\nEnter Website Name : ").title()
+        self.user = lambda: input("\nEnter Username : ")
+        self.psw = lambda: input("\nEnter PassWord : ")
+        self.add_to_activity("LOGGED IN")
+        self.main()
 
-      print(f"\n\t\t\t  {'-'*16}")
-      print("\t", end="\t\t  1 ")
-      print("| BACK")
-      while True:
-         choice = self.input()
-         if choice == "1":
-            self.main()
-            break
-         else:
-            print("\n1 ONLY..")
-   
-   def addone(self):
-      # this method will add the one data at a time
-      self.clear()
-      website = self.web()
-      username = self.user()
-      password = self.psw2() #the below command will add data in username table
-      key = Fernet.generate_key()
-      self.cur.execute(f"INSERT INTO {self.table} VALUES ((?),(?),(?),(?))",(website, username, self.encrypt(key,password),key))
-      self.conn.commit()
-      self.add()
-   
-   def addmany(self):
-      # this method will add multiple data at a time
-      self.clear()
-      while True: #this loop will keep going until the user give a correct int input
-         try: #try & except for handiling valueerror
-            choice = int(input("\nHow Many Records : "))
-            self.clear()
-            List = [] #empty list for entering the data
-            c = choice + 1
-            for i in range(choice):
-               c -=1
-               print(f"{c} More Record To Fill.. ")
-               website = self.web()
-               username = self.user()
-               password = self.psw2()
-               key = Fernet.generate_key()
-               self.clear()
-               data = website, username, self.encrypt(key,password), key
-               List.append(data)#entering the data into a list
-            self.cur.executemany(f"INSERT INTO {self.table} VALUES ((?),(?),(?),(?))", List)
-            # the above command will add multiple data into username table
-            self.conn.commit()
-            self.add()
-         except ValueError:
-            print("\nONLY INTERGERS..")
-   
-   def add(self):
-      # main method for adding data
-      self.clear()
-      self.pt(lst[7])
-      self.pmenu(lst[3:6])
+    def get_user_data(self):
+        self.cur.execute(f"SELECT rowid,* FROM {self.main_username}")
+        self.user_data = self.cur.fetchall()
+        return self.user_data
 
-      while True:
-         choice = self.input()
-         if choice in ['1','2','3']:
-            if choice == "1":
-               self.addone()
-            elif choice == "2":
-               self.addmany()
-            elif choice == "3":
-               self.main()
-            break
-         else:
-            print("\n1 TO 3 ONLY..")
-   
-   def update_web_usn_psw(self, pdata, lst):
-      # this method will update the website, username, password
-      self.clear()
-      for i in pdata:
-         print(f"{i[0]} | {i[1]} | {i[2]} | {self.decrypt(i[4],i[3])}")
-      while True:# this loop will keep going until the rowid in the lst
-         rowid = input("\nEnter Row Id : ")
-         if rowid in lst:
-            self.clear()
-            print('\nweb For (WEBSITE)\nusn For (USERNAME)\n')
-            choice = input('What Do You Want To Update: ').lower()
-            if choice in ['web','usn']:
-               while True:
-                  if choice == "web":
-                     website = self.web()
-                     self.cur.execute(f"UPDATE {self.table} SET website = '{website}' WHERE rowid = {int(rowid)}")
-                     break
-                  elif choice == "usn":
-                     username = self.user()
-                     self.cur.execute(f"UPDATE {self.table} SET username = '{username}' WHERE rowid = {int(rowid)}")
-                     break
-                  # elif choice == "psw":
-                  #    password = self.psw2()
-                  #    self.cur.execute(f"UPDATE {self.table} SET password = x'{password} WHERE rowid = {int(rowid)}")
-                  #    break
-                  else:
-                     print('\nOnly web, usn')
-            self.conn.commit()
-            self.update()
-            break
-         else:
-            print("\nNot In The List..")
-   
-   # def upone(self, pdata, lst):
-      # this method will update the whole record (NEED TO WORK ON THIS)
-      self.clear()
-      for i in pdata:
-         print(f"{i[0]} : {i[1]} {i[2]} {i[3]}")
-      while True:
-         rowid = input("\nEnter Row Id : ")
-         if rowid in lst:
-            self.clear()
-            website = self.web()
-            username = self.user()
-            password = self.psw2()#the below command will update the whole record
-            self.cur.execute(f"UPDATE {self.table} SET website = '{website}',username = '{username}',password = '{password}' WHERE rowid = {int(rowid)}")
-            self.conn.commit()
-            self.update()
-            break
-         else:
-            print("\nNot In The List..")
-   
-   # def upmany(self, pdata, lst):
-      # this method will update multiple records (NEED TO WORK ON THIS)
-      self.clear()
-      for i in pdata:
-         print(f"{i[0]} : {i[1]} {i[2]} {i[3]}")
-      while True:
-         try:
-            choice = int(input('How Many Records To Update: '))
-            c = choice + 1
-            for i in range(choice):
-               c-=1
-               print(f'\n{c} More Records To Update\n')
-               rowid = input("\nEnter Row Id : ")
-               if rowid in lst:
-                  self.clear()
-                  website = self.web()
-                  username = self.user()
-                  password = self.psw2()#the below command will update the whole record
-                  self.cur.execute(f"UPDATE {self.table} SET website = '{website}',username = '{username}',password = '{password}' WHERE rowid = {int(rowid)}")
-                  self.conn.commit()
-               else:
-                  print("\nNot In The List..")
-            self.update()
-            break
-         except ValueError:
-            print('Only numbers..')
-   
-   def update_fn_ln_pw(self):
-      # this method will update the main data of the user
-      self.clear()
-      self.cur.execute(f"SELECT * FROM maindata WHERE username = '{self.table}'")
-      data = self.cur.fetchall()[0]
-      password = self.psw2()#to confirem the user is the owner by asking password
-      if self.MHT(data[3], password):
-         print(f"{data[0]} | {data[1]} | {data[2]} | {password}")
-         while True:
-            print('\nfnam For (FIRST NAME)\nlnam For (LAST NAME)\npsw For (PASSWORD)\n')
-            choice = input('What Do You Want To Update: ').lower()
-            if choice == 'fnam':
-               self.name = input('Enter First Name: ').upper()#the below command will update the first name
-               self.cur.execute(f"UPDATE maindata SET first_name = '{self.name.title()}'")
-               self.conn.commit()
-               self.update()
-               break
-            elif choice == 'lnam':
-               last_name = input('Enter Last Name: ').title()#the below command will update the last name
-               self.cur.execute(f"UPDATE maindata SET last_name = '{last_name}'")
-               self.conn.commit()
-               self.update()
-               break
-            elif choice == 'psw':
-               while True:
-                  password = input('Enter Password: ')
-                  confirm_pw = input('Enter Password to Confirm: ')
-                  if password == confirm_pw:
-                     self.psw = password#the below command will update the password
-                     self.cur.execute(f"UPDATE maindata SET password = '{self.HS(self.psw)}'")
-                     self.conn.commit()
-                     self.update()
-                     break
-                  print('The Password Does Not Match Enter Again..')
-               break
+    def show_password(self):
+        self.clear()
+        for data in self.get_user_data():
+            print(f"\t\t     {data[0]} : {data[1]} {data[2]} {data[3]}")
+
+        print(f"\n\t\t\t  {'-'*16}")
+        print("\t", end="\t\t  1 ")
+        print("| BACK")
+        while True:
+            self.choice = self.input()
+            if self.choice == "1":
+                self.show()
+                break
             else:
-               print('Only fnam, lnam, psw')
-      else:
-         print("\n\t\t\t  Wrong password")
+                print("\n1 ONLY..")
 
-   def update(self):
-      # the main method for update menu
-      self.clear()
-      self.pt(lst[8])
-      self.pmenu(['WEB OR USN']+['Main: NAME or PASSWORD']+[lst[5]])
-      self.cur.execute(f"SELECT rowid,* FROM {self.table}")
-      pdata = self.cur.fetchall()
-      rows = []
-      for i in pdata:
-         rows.append(str(i[0]))
-      while True:
-         choice = self.input()
-         if choice in ["1", "2", "3"]:
-            if choice == "1":
-               self.update_web_usn_psw(pdata, rows)
-            elif choice == "2":
-               self.update_fn_ln_pw()
-            elif choice == "3":
-               self.main()
-            break
-         else:
-            print("\n1 TO 3 ONLY..")
-   
-   def delone(self, pdata, lst):
-      # this method will delete a single value
-      self.clear()
-      for i in pdata:
-         print(f"{i[0]} | {i[1]} | {i[2]} | {self.decrypt(i[4],i[3])}")
-      while True:
-         rowid = input("\nEnter Row Id : ")
-         if rowid in lst:
-            self.clear()#the bellow command will delete the value
-            self.cur.execute(f"DELETE from {self.table} WHERE rowid = {int(rowid)}")
-            self.conn.commit()
-            self.delete()
-         else:
-            print("\nNot In The List..")
-   
-   def delmany(self, pdata, lst):
-      # this method will delete a multiple value
-      self.clear()
-      for i in pdata:
-         print(f"{i[0]} | {i[1]} | {i[2]} | {self.decrypt(i[4],i[3])}")
-      while True:
-         try:
-            choice = int(input("\nHow Many Records : "))
-            self.clear()
-            List = []
-            for i in range(choice):
-               rowid = input("\nEnter Row Id : ")
-               self.clear()
-               if rowid in lst:
-                  data = (rowid,)
-                  List.append(data)#the bellow command will multiple the value
-            self.cur.executemany(f"DELETE from {self.table} WHERE rowid = ?",List)
-            self.conn.commit()
-            self.delete()
-         except ValueError:
-            print("\nONLY INTERGERS..")
-   
-   def delall(self, lst):
-      # this method will delete all the values from the table
-      self.clear()
-      self.cur.execute(f"SELECT * FROM maindata WHERE username = '{self.table}'")
-      pdata = self.cur.fetchall()[0]
+    def show_backup_codes(self):
+        self.clear()
+        for data in self.backup_codes:
+            print(f"\t\t     {data}")
 
-      while True:
-         ask = input("\nEnter PassWord To Confirm : ")
-         if self.MHT(pdata[3], ask):
-            self.clear()
-            List = []
-            for i in lst:
-               data = (int(i),)
-               List.append(data)# the bekow command will delete all the values from the table
-            self.cur.executemany(f"DELETE from {self.table} WHERE rowid = ?", List)
-            self.conn.commit()
-            self.delete()
-            break
-         else:
-            self.delete()
-   
-   def delacc(self):
-      # this method will delete the table from the main database
-      self.clear()
-      self.cur.execute(f"SELECT * FROM maindata WHERE username = '{self.table}'")
-      pdata = self.cur.fetchall()[0]
+        print(f"\n\t\t\t  {'-'*16}")
+        print("\t", end="\t\t  1 ")
+        print("| BACK")
+        while True:
+            self.choice = self.input()
+            if self.choice == "1":
+                self.show()
+                break
+            else:
+                print("\n1 ONLY..")
 
-      while True:
-         ask = input("\nEnter PassWord To Confirm : ")
-         if self.MHT(pdata[3], ask):
+    def show(self):
+        self.clear()
+        self.print_title(self.main_title, lst[6])
+        self.print_menu(lst[14:15] + lst[16:17] + lst[5:6])
+
+        while True:
+            self.choice = self.input()
+            if self.choice in ["1", "2", "3"]:
+                if self.choice == "1":
+                    self.show_password()
+                elif self.choice == "2":
+                    self.show_backup_codes()
+                elif self.choice == "3":
+                    self.main()
+                break
+            else:
+                print("\n1 TO 3 ONLY..")
+
+    def addone(self):
+        self.clear()
+        self.website = self.web()
+        self.username = self.user()
+        self.password = self.psw()
+        self.cur.execute(
+            f"INSERT INTO {self.main_username} VALUES ((?),(?),(?))",
+            (self.website, self.username, self.password),
+        )
+        self.conn.commit()
+        self.add_to_activity("ONE RECORD WAS ADDED")
+        self.add()
+
+    def addmany(self):
+        self.clear()
+        self.List.clear()
+        while True:
+            try:
+                self.choice = int(input("\nHow Many Records : "))
+                self.clear()
+                c = self.choice + 1
+                for i in range(self.choice):
+                    c -= 1
+                    print(f"{c} More Record To Fill.. ")
+                    self.website = self.web()
+                    self.username = self.user()
+                    self.password = self.psw()
+                    self.clear()
+                    data = self.website, self.username, self.password
+                    self.List.append(data)
+                self.cur.executemany(
+                    f"INSERT INTO {self.main_username} VALUES ((?),(?),(?))", self.List
+                )
+                self.conn.commit()
+                self.add_to_activity(f"{self.choice} RECORDS WAS ADDED")
+                self.add()
+            except ValueError:
+                print("\nONLY INTERGERS..")
+
+    def add(self):
+        self.clear()
+        self.print_title(self.main_title, lst[7])
+        self.print_menu(lst[3:6])
+
+        while True:
+            self.choice = self.input()
+            if self.choice in ["1", "2", "3"]:
+                if self.choice == "1":
+                    self.addone()
+                elif self.choice == "2":
+                    self.addmany()
+                elif self.choice == "3":
+                    self.main()
+                break
+            else:
+                print("\n1 TO 3 ONLY..")
+
+    def update_web_usn_psw(self):
+        self.clear()
+        self.List.clear()
+        for data in self.get_user_data():
+            print(f"\t\t     {data[0]} : {data[1]} {data[2]} {data[3]}")
+            self.List.append(data[0])
+        while True:
+            try:
+                rowid = int(input("\nEnter Row Id : "))
+                if rowid in self.List:
+                    self.clear()
+                    print(
+                        "\nweb For (WEBSITE)\nusn For (USERNAME)\npsw For (PASSWORD)\n"
+                    )
+                    self.choice = input("What Do You Want To Update: ").lower()
+                    if self.choice in ["web", "usn", "psw"]:
+                        while True:
+                            if self.choice == "web":
+                                self.website = self.web()
+                                self.cur.execute(
+                                    f"UPDATE {self.main_username} SET website = '{self.website}' WHERE rowid = {rowid}"
+                                )
+                                self.add_to_activity(
+                                    f"ROW ID {rowid} WEBSITE NAME WAS UPDATED"
+                                )
+                                break
+                            elif self.choice == "usn":
+                                self.username = self.user()
+                                self.cur.execute(
+                                    f"UPDATE {self.main_username} SET username = '{self.username}' WHERE rowid = {rowid}"
+                                )
+                                self.add_to_activity(
+                                    f"ROW ID {rowid} USERNAME WAS UPDATED"
+                                )
+                                break
+                            elif self.choice == "psw":
+                                self.password = self.psw()
+                                self.cur.execute(
+                                    f"UPDATE {self.main_username} SET password = '{self.password}' WHERE rowid = {rowid}"
+                                )
+                                self.add_to_activity(
+                                    f"ROW ID {rowid} PASSWORD WAS UPDATED"
+                                )
+                                break
+                            else:
+                                print("\nOnly web, usn, psw")
+                    self.conn.commit()
+                    self.update()
+                    break
+                else:
+                    print("\nNot In The List..")
+            except ValueError:
+                print("\nNot In The List..")
+
+    def upone(self):
+        self.clear()
+        self.List.clear()
+        for data in self.get_user_data():
+            print(f"\t\t     {data[0]} : {data[1]} {data[2]} {data[3]}")
+            self.List.append(data[0])
+        while True:
+            try:
+                rowid = int(input("\nEnter Row Id : "))
+                if rowid in self.List:
+                    self.clear()
+                    self.website = self.web()
+                    self.username = self.user()
+                    self.password = self.psw()
+                    self.cur.execute(
+                        f"UPDATE {self.main_username} SET website = '{self.website}',username = '{self.username}',password = '{self.password}' WHERE rowid = {rowid}"
+                    )
+                    self.conn.commit()
+                    self.add_to_activity(f"ROW ID {rowid} WHOLE RECORD WAS UPDATED")
+                    self.update()
+                    break
+                else:
+                    print("\nNot In The List..")
+            except ValueError:
+                print("/nOnly Numbers..")
+
+    def upmany(self):
+        self.clear()
+        self.List.clear()
+        for data in self.get_user_data():
+            print(f"\t\t     {data[0]} : {data[1]} {data[2]} {data[3]}")
+            self.List.append(data[0])
+        while True:
+            try:
+                self.choice = int(input("How Many Records To Update: "))
+                c = self.choice + 1
+                for i in range(self.choice):
+                    c -= 1
+                    print(f"\n{c} More Records To Update\n")
+                    try:
+                        rowid = int(input("\nEnter Row Id : "))
+                        if rowid in self.List:
+                            self.clear()
+                            self.website = self.web()
+                            self.username = self.user()
+                            self.password = self.psw()
+                            self.cur.execute(
+                                f"UPDATE {self.main_username} SET website = '{self.website}',username = '{self.username}',password = '{self.password}' WHERE rowid = {rowid}"
+                            )
+                            self.add_to_activity(
+                                f"ROW ID {rowid} WHOLE RECORD WAS UPDATED"
+                            )
+                            self.conn.commit()
+                        else:
+                            print("\nNot In The List..")
+                    except ValueError:
+                        print("\nOnly Numbers..")
+                self.update()
+                break
+            except ValueError:
+                print("Only numbers..")
+
+    def update_fn_ln_pw(self):
+        self.clear()
+        password = self.psw()
+        if password == self.main_password:
+            print(
+                f"{self.first_name} | {self.last_name} | {self.main_username} | {self.main_password}"
+            )
             while True:
-               ask2 = input('Are You Sure Type YES To Confirm: ')
-               if ask2 == 'YES':
-                  self.clear()
-                  self.cur.execute(f"DROP TABLE {self.table}")
-                  self.conn.commit()#the below command will delete the table from the database
-                  self.cur.execute(f"DELETE from maindata WHERE username = '{self.table}'")
-                  self.conn.commit()
-                  self.exit()
-               elif ask2 == 'NO':
-                  self.delete()
-               print('Only YES or NO..')
-         else:
-            print('The Password Was Wrong..')
-   
-   def delete(self):
-      # the main method for delete menu
-      self.clear()
-      self.pt(lst[9])
-      self.pmenu(lst[3:5]+lst[10:12]+[lst[5]])
-      self.cur.execute(f"SELECT rowid,* FROM {self.table}")
-      pdata = self.cur.fetchall()
-      rows = []
-      for i in pdata:
-         rows.append(str(i[0]))
+                print(
+                    "\nfnam For (FIRST NAME)\nlnam For (LAST NAME)\npsw For (PASSWORD)\n"
+                )
+                self.choice = input("What Do You Want To Update: ").lower()
+                if self.choice == "fnam":
+                    self.first_name = input("Enter First Name: ").title()
+                    self.main_title = f"{self.first_name.upper()}'s ACCOUNT"
+                    self.cur.execute(
+                        f"UPDATE maindata SET first_name = '{self.first_name}'"
+                    )
+                    self.add_to_activity("FIRST NAME WAS UPDATED")
+                    break
+                elif self.choice == "lnam":
+                    self.last_name = input("Enter Last Name: ").title()
+                    self.cur.execute(
+                        f"UPDATE maindata SET last_name = '{self.last_name}'"
+                    )
+                    self.add_to_activity("LAST NAME WAS UPDATED")
+                    break
+                elif self.choice == "psw":
+                    while True:
+                        self.main_password = input("Enter Password: ")
+                        confirm_pw = input("Enter Password to Confirm: ")
+                        if self.main_password == confirm_pw:
+                            self.cur.execute(
+                                f"UPDATE maindata SET password = '{self.main_password}'"
+                            )
+                            self.add_to_activity("MAIN PASSWORD WAS UPDATED")
+                            break
+                        print("The Password Does Not Match Enter Again..")
+                    break
+                else:
+                    print("Only fnam, lnam, psw")
+            self.conn.commit()
+            self.update()
+        else:
+            print("\n\t\t\t  Wrong password")
 
-      while True:
-         choice = self.input()
-         if choice in ['1','2','3','4','5']:
-            if choice == "1":
-               self.delone(pdata, rows)
-            elif choice == "2":
-               self.delmany(pdata, rows)
-            elif choice == "3":
-               self.delall(rows)
-            elif choice == "4":
-               self.delacc()
-            elif choice == "5":
-               self.main()
-            break
-         else:
-            print("\n1 TO 5 ONLY...")
-   
-   def main(self):
-      # the main method for the second screen
-      self.clear()
-      print(f"\t\t{'* '*5}{self.name}'s ACCOUNT{' *'*5}")
-      self.pmenu(lst[6:10]+[lst[2]])
-      while True:
-         choice = self.input()
-         if choice in ['1','2','3','4','5']:
-            if choice == "1":
-               self.show()
-            elif choice == "2":
-               self.add()
-            elif choice == "3":
-               self.update()
-            elif choice == "4":
-               self.delete()
-            elif choice == "5":
-               self.exit()
-            break
-         else:
-            print("\n1 TO 5 ONLY...")
+    def update(self):
+        self.clear()
+        self.print_title(self.main_title, lst[8])
+        self.print_menu(
+            ["WEB OR USN OR PSW"] + lst[3:5] + ["Main: NAME or PASSWORD"] + [lst[5]]
+        )
+        while True:
+            self.choice = self.input()
+            if self.choice in ["1", "2", "3", "4", "5"]:
+                if self.choice == "1":
+                    self.update_web_usn_psw()
+                elif self.choice == "2":
+                    self.upone()
+                elif self.choice == "3":
+                    self.upmany()
+                elif self.choice == "4":
+                    self.update_fn_ln_pw()
+                elif self.choice == "5":
+                    self.main()
+                break
+            else:
+                print("\n1 TO 3 ONLY..")
+
+    def activity_(self):
+
+        self.clear()
+        self.print_title(self.main_title, lst[15])
+
+        for data in self.main_activity:
+            print(f"\t\t     {data[0]} | {data[1]} | {data[2]}")
+
+        print(f"\n\t\t\t  {'-'*16}")
+        print("\t", end="\t\t  1 ")
+        print("| BACK")
+        while True:
+            self.choice = self.input()
+            if self.choice == "1":
+                self.main()
+                break
+            else:
+                print("\n1 ONLY..")
+
+    def delone(self):
+        self.clear()
+        self.List.clear()
+        for data in self.get_user_data():
+            print(f"\t\t     {data[0]} : {data[1]} {data[2]} {data[3]}")
+            self.List.append(data[0])
+        while True:
+            try:
+                rowid = int(input("\nEnter Row Id : "))
+                if rowid in self.List:
+                    self.clear()
+                    self.cur.execute(
+                        f"DELETE from {self.main_username} WHERE rowid = {rowid}"
+                    )
+                    self.add_to_activity(f"ROW ID {rowid} WAS DELETED")
+                    self.conn.commit()
+                    self.delete()
+                else:
+                    print("\nNot In The List..")
+            except ValueError:
+                print("\nOnly Numbers..")
+
+    def delmany(self):
+        self.clear()
+        while True:
+            try:
+                self.choice = int(input("\nHow Many Records : "))
+                self.clear()
+                for i in range(self.choice):
+                    self.List.clear()
+                    for data in self.get_user_data():
+                        print(f"\t\t     {data[0]} : {data[1]} {data[2]} {data[3]}")
+                        self.List.append(data[0])
+                    try:
+                        rowid = int(input("\nEnter Row Id : "))
+                        self.clear()
+                        if rowid in self.List:
+                            self.add_to_activity(f"ROW ID {rowid} WAS DELETED")
+                            self.cur.execute(
+                                f"DELETE from {self.main_username} WHERE rowid = {rowid}"
+                            )
+                            self.conn.commit()
+                        else:
+                            print("\nNot In The List..")
+                    except ValueError:
+                        print("\nOnly Numbers..")
+                self.delete()
+            except ValueError:
+                print("\nONLY INTERGERS..")
+
+    def delall(self):
+        self.clear()
+        self.List.clear()
+        for data in self.get_user_data():
+            self.List.append((data[0],))
+        while True:
+            ask = input("\nEnter PassWord To Confirm : ")
+            if ask == self.main_password:
+                self.clear()
+                self.cur.executemany(
+                    f"DELETE from {self.main_username} WHERE rowid = (?)", self.List
+                )
+                self.conn.commit()
+                self.add_to_activity("ALL THE RECORDS WAS DELETED")
+                self.delete()
+                break
+            else:
+                self.delete()
+
+    def delacc(self):
+        self.clear()
+        while True:
+            ask = input("\nEnter PassWord To Confirm : ")
+            if ask == self.main_password:
+                while True:
+                    ask2 = input("Are You Sure Type YES To Confirm: ")
+                    if ask2 == "YES":
+                        self.clear()
+                        self.cur.execute(f"DROP TABLE {self.main_username}")
+                        self.cur.execute(
+                            f"DELETE from maindata WHERE username = '{self.main_username}'"
+                        )
+                        self.conn.commit()
+                        self.exit()
+                    elif ask2 == "NO":
+                        self.delete()
+                    else:
+                        print("Only YES or NO..")
+            else:
+                print("The Password Was Wrong..")
+
+    def delete(self):
+        self.clear()
+        self.print_title(self.main_title, lst[9])
+        self.print_menu(lst[3:5] + lst[10:12] + [lst[5]])
+
+        while True:
+            self.choice = self.input()
+            if self.choice in ["1", "2", "3", "4", "5"]:
+                if self.choice == "1":
+                    self.delone()
+                elif self.choice == "2":
+                    self.delmany()
+                elif self.choice == "3":
+                    self.delall()
+                elif self.choice == "4":
+                    self.delacc()
+                elif self.choice == "5":
+                    self.main()
+                break
+            else:
+                print("\n1 TO 5 ONLY...")
+
+    def main(self):
+        self.clear()
+        print(f"\t\t{'* '*5}{self.main_title}{' *'*5}")
+        self.print_menu(lst[6:10] + [lst[15]] + [lst[2]])
+        while True:
+            self.choice = self.input()
+            if self.choice in ["1", "2", "3", "4", "5", "6"]:
+                if self.choice == "1":
+                    self.show()
+                elif self.choice == "2":
+                    self.add()
+                elif self.choice == "3":
+                    self.update()
+                elif self.choice == "4":
+                    self.delete()
+                elif self.choice == "5":
+                    self.activity_()
+                elif self.choice == "6":
+                    self.add_to_activity("LOGGED OUT")
+                    self.exit()
+                break
+            else:
+                print("\n1 TO 5 ONLY...")
 
 
-a = App().main()
+App().main()
